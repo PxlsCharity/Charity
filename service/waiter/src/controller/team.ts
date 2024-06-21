@@ -286,7 +286,7 @@ export default new Elysia()
 			});
 			if (member == undefined || !member.canEditTeam) throw new NotAuthorizedError();
 
-			const updatedTeam = await db.update(schema.teams).set({
+			const [updatedTeam] = await db.update(schema.teams).set({
 				namespace: context.body.namespace != undefined ? context.body.namespace.toLowerCase() : undefined, // can't toLowerCase on undefined
 				displayName: context.body.displayName,
 				description: context.body.description,
@@ -299,9 +299,9 @@ export default new Elysia()
 				}
 				throw err;
 			});
-			if (updatedTeam.length == 0) throw new ResourceNotFoundError();
+			if (updatedTeam == undefined) throw new ResourceNotFoundError();
 
-			return Response.json(new APITeam(updatedTeam[0]));
+			return Response.json(new APITeam(updatedTeam));
 		},
 		{
 			detail: { tags, summary: 'Update team details' },
@@ -335,8 +335,8 @@ export default new Elysia()
 			});
 			if (member == undefined || !member.isOwner) throw new NotAuthorizedError();
 
-			const deletedTeam = await db.delete(schema.teams).where(eq(schema.teams.id, team.id)).returning();
-			if (!deletedTeam || deletedTeam.length == 0) throw new ResourceNotFoundError();
+			const [deletedTeam] = await db.delete(schema.teams).where(eq(schema.teams.id, team.id)).returning();
+			if (deletedTeam == undefined) throw new ResourceNotFoundError();
 
 			return;
 		},

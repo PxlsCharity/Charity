@@ -232,24 +232,32 @@ export default new Elysia()
 			});
 			if (slug == undefined || slug.templateId == undefined) throw new ResourceNotFoundError();
 
-			const template = await db.update(schema.templates).set(
-				{
-					displayName: context.body.displayName,
-					description: context.body.description
-				}
-			)
-			.where(eq(schema.templates.id, slug.templateId))
-			.returning();
+			const updateValue = {
+				displayName: context.body.displayName,
+				description: context.body.description
+			};
 
-			if (template.length == 0) throw new KnownInternalServerError({
+			// Only call update if there is something that will change
+			const updatedCount = Object.values(updateValue).filter(v => v != undefined).length;
+			const [template] = updatedCount == 0
+				? [await db.query.templates.findFirst({
+					where: eq(schema.templates.id, slug.templateId)
+				})]
+				: await db.update(schema.templates).set(
+					updateValue
+				)
+				.where(eq(schema.templates.id, slug.templateId))
+				.returning();
+
+			if (template == undefined) throw new KnownInternalServerError({
 				message: 'Slug with templateId without a corresponding template',
 				template, slug, team
 			});
 
 			// Update the slug
-			let updatedSlug: InferSelectModel<typeof schema.slugs>[] = [slug];
+			let updatedSlug: InferSelectModel<typeof schema.slugs> = slug;
 			if (context.body.slug != undefined) {
-				updatedSlug = await db.update(schema.slugs).set({
+				[updatedSlug] = await db.update(schema.slugs).set({
 					slug: context.body.slug.toLowerCase()
 				}).where(and(
 					eq(schema.slugs.id, slug.id),
@@ -261,13 +269,13 @@ export default new Elysia()
 					}
 					throw err;
 				});
-				if (updatedSlug.length == 0) throw new KnownInternalServerError({
+				if (updatedSlug == undefined) throw new KnownInternalServerError({
 					message: 'Slug disappeared from under us while updating template',
 					updatedSlug, slug, template, team
 				});
 			}
 
-			return Response.json(new APITemplate(template[0], updatedSlug[0]));
+			return Response.json(new APITemplate(template, updatedSlug));
 		},
 		{
 			detail: { tags, summary: 'Update template details' },
@@ -314,19 +322,19 @@ export default new Elysia()
 			if (slug == undefined || slug.templateId == undefined) throw new ResourceNotFoundError();
 
 			// Delete the template
-			const template = await db.delete(schema.templates)
+			const [template] = await db.delete(schema.templates)
 				.where(eq(schema.templates.id, slug.templateId))
 				.returning();
 
-			if (template.length == 0) throw new KnownInternalServerError({
+			if (template == undefined) throw new KnownInternalServerError({
 				message: 'Slug with templateId without a corresponding template',
 				template, slug, team
 			});
 
 			// FIXME: The slug should be deleted, but ON DELETE CASCADE doesn't work, maybe because our CHECK doesn't work, more probably because it's just nullable and so it ignores ON DELETE CASCADE.
 			// So, delete the slug manually for now.
-			const deletedSlug = await db.delete(schema.slugs).where(eq(schema.slugs.id, slug.id)).returning();
-			if (deletedSlug.length == 0) throw new KnownInternalServerError({
+			const [deletedSlug] = await db.delete(schema.slugs).where(eq(schema.slugs.id, slug.id)).returning();
+			if (deletedSlug == undefined) throw new KnownInternalServerError({
 				message: 'Slug disappeared from under us while deleting (which is what it actually should do I guess, but it doesn\'t, because ON DELETE CASCADE is supposed to be broken. Is it working now for some reason?)',
 				deletedSlug, slug, team
 			});

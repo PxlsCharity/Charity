@@ -221,22 +221,30 @@ export default new Elysia()
 			});
 			if (slug == undefined || slug.linkId == undefined) throw new ResourceNotFoundError();
 			
-			// Update the link
-			const link = await db.update(schema.links).set({
+			const updateValue = {
 				url: context.body.url,
 				text: context.body.text
-			}).where(and(
-				eq(schema.links.id, slug.linkId),
-			)).returning();
-			if (link.length == 0) throw new KnownInternalServerError({
+			};
+
+			// Only call update if there is something that will change
+			const updatedCount = Object.values(updateValue).filter(v => v != undefined).length;
+			const [link] = updatedCount == 0
+				? [await db.query.links.findFirst({
+					where: eq(schema.templates.id, slug.linkId)
+				})]
+				: await db.update(schema.links).set(updateValue).where(and(
+					eq(schema.links.id, slug.linkId),
+				)).returning();
+
+			if (link == undefined) throw new KnownInternalServerError({
 				message: 'Slug with linkId without a corresponding link',
 				link, slug, team
 			});
 			
 			// Update the slug
-			let updatedSlug: InferSelectModel<typeof schema.slugs>[] = [slug];
+			let updatedSlug: InferSelectModel<typeof schema.slugs> = slug;
 			if (context.body.slug != undefined) {
-				updatedSlug = await db.update(schema.slugs).set({
+				[updatedSlug] = await db.update(schema.slugs).set({
 					slug: context.body.slug.toLowerCase()
 				}).where(and(
 					eq(schema.slugs.id, slug.id),
@@ -248,13 +256,13 @@ export default new Elysia()
 					}
 					throw err;
 				});
-				if (updatedSlug.length == 0) throw new KnownInternalServerError({
+				if (updatedSlug == undefined) throw new KnownInternalServerError({
 					message: 'Slug disappeared from under us while updating link',
 					updatedSlug, slug, link, team
 				});
 			}
 
-			return Response.json(new APILink(link[0], updatedSlug[0]));
+			return Response.json(new APILink(link, updatedSlug));
 		},
 		{
 			detail: { tags, summary: 'Update link details' },
@@ -301,19 +309,19 @@ export default new Elysia()
 			if (slug == undefined || slug.linkId == undefined) throw new ResourceNotFoundError();
 
 			// Delete the link
-			const link = await db.delete(schema.links).where(and(
+			const [link] = await db.delete(schema.links).where(and(
 				eq(schema.links.teamId, team.id),
 				eq(schema.links.id, slug.linkId),
 			)).returning();
-			if (link.length == 0) throw new KnownInternalServerError({
+			if (link == undefined) throw new KnownInternalServerError({
 				message: 'Link disappeared from under us while deleting',
 				link, slug, team
 			});
 
 			// FIXME: The slug should be deleted, but ON DELETE CASCADE doesn't work, maybe because our CHECK doesn't work, more probably because it's just nullable and so it ignores ON DELETE CASCADE.
 			// So, delete the slug manually for now.
-			const deletedSlug = await db.delete(schema.slugs).where(eq(schema.slugs.id, slug.id)).returning();
-			if (deletedSlug.length == 0) throw new KnownInternalServerError({
+			const [deletedSlug] = await db.delete(schema.slugs).where(eq(schema.slugs.id, slug.id)).returning();
+			if (deletedSlug == undefined) throw new KnownInternalServerError({
 				message: 'Slug disappeared from under us while deleting (which is what it actually should do I guess, but it doesn\'t, because ON DELETE CASCADE is supposed to be broken. Is it working now for some reason?)',
 				deletedSlug, slug, team
 			});

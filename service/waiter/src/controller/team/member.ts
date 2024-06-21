@@ -118,11 +118,11 @@ export default new Elysia()
 				) throw new NotAuthorizedError();
 			}
 
-			const deletedTeamMember = await db.delete(schema.teamMembers).where(and(
+			const [deletedTeamMember] = await db.delete(schema.teamMembers).where(and(
 				eq(schema.teamMembers.teamId, team.id),
 				eq(schema.teamMembers.userId, targetMember.userId)
 			)).returning();
-			if (!deletedTeamMember || deletedTeamMember.length == 0) throw new KnownInternalServerError({
+			if (deletedTeamMember == undefined) throw new KnownInternalServerError({
 				message: 'Team member disappeared from under us during delete',
 				deletedTeamMember, targetMember, actingMember, team
 			});
@@ -179,7 +179,7 @@ export default new Elysia()
 			// Check permissions to see if we can update the team member
 			if (!actingMember.isOwner && (!actingMember.canManageMembers || targetMember.canManageMembers || targetMember.isOwner)) throw new BadRequestError();
 
-			const updatedTeamMember = await db.update(schema.teamMembers).set({
+			const [updatedTeamMember] = await db.update(schema.teamMembers).set({
 				canManageTemplates: context.body.canManageTemplates,
 				canManageMembers: context.body.canManageMembers,
 				canManageRelationships: context.body.canManageRelationships,
@@ -190,7 +190,7 @@ export default new Elysia()
 				eq(schema.teamMembers.teamId, team.id),
 				eq(schema.teamMembers.userId, targetMember.userId)
 			)).returning();
-			if (!updatedTeamMember || updatedTeamMember.length == 0) throw new KnownInternalServerError({
+			if (updatedTeamMember == undefined) throw new KnownInternalServerError({
 				message: 'Team member disappeared from under us during update',
 				updatedTeamMember, targetMember, actingMember, team
 			});
